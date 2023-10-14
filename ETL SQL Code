@@ -1,0 +1,57 @@
+INSERT INTO `capstone-399712.Partition_dataset.new_target_table`
+
+SELECT
+trips.usertype AS User_type,
+CONCAT(trips.start_station_name, ' to ', trips.end_station_name) AS Route,
+trips.start_station_name AS Start_station,
+start_zip.zip_code AS Zip_code_start,
+start_neighbourhood.borough AS Borough_start,
+start_neighbourhood.neighborhood AS Neighbourhood_start,
+trips.end_station_name AS End_station,
+end_zip.zip_code AS Zip_code_end,
+end_neighbourhood.borough AS Borough_end,
+end_neighbourhood.neighborhood AS Neighbourhood_end,
+DATE(trips.starttime) AS Start_day,
+CAST(TIMESTAMP_ADD(DATE_TRUNC(trips.starttime, HOUR), INTERVAL IFNULL((EXTRACT(MINUTE FROM trips.starttime) - MOD(EXTRACT(MINUTE FROM trips.starttime), 60)), 0) MINUTE) AS STRING) AS Start_time,
+weather.temp AS temperature,
+weather.prcp AS precepetation,
+CAST(SUM(ROUND(CAST(trips.tripduration / 60 AS INT64), -1)) AS INT64) AS Trip_duration,
+COUNT(trips.bikeid) AS Total_rides
+FROM bigquery-public-data.new_york_citibike.citibike_trips trips
+INNER JOIN bigquery-public-data.geo_us_boundaries.zip_codes start_zip
+ON ST_DWithin(
+ST_GeogPoint(trips.start_station_longitude, trips.start_station_latitude),
+start_zip.zip_code_geom,
+0)
+INNER JOIN bigquery-public-data.geo_us_boundaries.zip_codes end_zip
+ON ST_DWithin(
+ST_GeogPoint(trips.end_station_longitude, trips.end_station_latitude),
+end_zip.zip_code_geom,
+0)
+INNER JOIN capstone-399712.nyc_zip_codes.NYC_ZIP_CODES start_neighbourhood
+ON start_zip.zip_code = CAST(start_neighbourhood.zip AS STRING)
+INNER JOIN capstone-399712.nyc_zip_codes.NYC_ZIP_CODES end_neighbourhood
+ON end_zip.zip_code = CAST(end_neighbourhood.zip AS STRING)
+
+INNER JOIN bigquery-public-data.noaa_gsod.gsod2018 weather
+    ON PARSE_DATE("%Y%m%d", CONCAT(weather.year, weather.mo, weather.da)) = DATE(trips.starttime)
+
+WHERE
+(trips.start_station_name IS NOT NULL OR trips.start_station_name <> '')
+
+
+GROUP BY
+User_type,
+Route,
+Start_station,
+Zip_code_start,
+Borough_start,
+Neighbourhood_start,
+End_station,
+Zip_code_end,
+Borough_end,
+Neighbourhood_end,
+Start_day,
+Start_time,
+temperature,
+precepetation;
